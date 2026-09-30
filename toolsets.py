@@ -70,9 +70,9 @@ _CODING_TOOLS = _core_without("image_generate", "text_to_speech", "cronjob_manag
 
 # Toolsets a CLIENT adds to its own sessions (tui_gateway/server.py::_gui_surface_toolsets), never
 # config: another surface lacking them made no configuration choice.
-CLIENT_SURFACE_TOOLSETS = frozenset({"project", "desktop_ui"})
+CLIENT_SURFACE_TOOLSETS = frozenset({"project", "desktop_ui", "catalog"})
 
-TOOLSET_SESSION_PLATFORMS = {"setup": frozenset({"desktop"})}
+TOOLSET_SESSION_PLATFORMS = {"setup": frozenset({"desktop"}), "catalog": frozenset({"desktop"})}
 
 # Core toolset definitions: individual tools or references to other toolsets.
 TOOLSETS = {
@@ -147,11 +147,11 @@ TOOLSETS = {
          "annotate_preview", "read_window_below", "focus_pane", "react_to_message",
          "gui_tour", "show_tip"],
     ),
-    "setup": _ts(
-        "Onboarding-only surface for the setup profile: catalog plugin/skill install "
-        "requests through the approval card",
+    "catalog": _ts(
+        "Desktop catalog plugin/skill install requests through the approval card (GUI sessions only)",
         ["manage_catalog"],
     ),
+    "setup": _ts("Onboarding-only surface for the setup profile"),
     "clarify": _ts("Ask the user clarifying questions (multiple-choice or open-ended)", ["clarify"]),
     "code_execution": _ts("Run Python scripts that call tools programmatically (reduces LLM round trips)", ["execute_code"]),
     "delegation": _ts("Spawn subagents with isolated context for complex subtasks", ["delegate_task"]),
