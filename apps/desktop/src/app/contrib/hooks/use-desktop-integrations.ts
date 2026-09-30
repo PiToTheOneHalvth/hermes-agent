@@ -233,7 +233,18 @@ export function useDesktopIntegrations({
               setRememberedSessionId(remembered, activeProfile)
               navigate(sessionRoute(remembered), { replace: true })
             })
-            .catch(() => undefined)
+            .catch(err => {
+              // A 404 means the remembered session is gone for good (an
+              // uncommitted new-chat preview that was orphaned by a backend
+              // restart, or a session deleted elsewhere). Clear the stale
+              // pointer so the next cold start opens a fresh chat instead of
+              // re-404ing a ghost. Transient failures (offline, 5xx, backend
+              // still booting) keep the value for the next launch.
+              const message = err instanceof Error ? err.message : String(err)
+              if (/^404[:\s]/.test(message)) {
+                setRememberedSessionId(null, activeProfile)
+              }
+            })
 
           return
         }
