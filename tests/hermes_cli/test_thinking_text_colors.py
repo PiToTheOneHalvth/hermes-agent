@@ -131,3 +131,67 @@ def test_partial_tail_cut_position_is_before_the_token():
 
 def test_empty_line_stays_wrapped():
     assert _thinking_line("") == f"{_THINKING_GREEN}{RST}"
+
+
+# ---- Config knob: display.thinking_colors overrides the spec palette ----
+
+
+def test_thinking_hex_to_ansi_valid_and_invalid():
+    from hermes_cli.cli_stream_mixin import _thinking_hex_to_ansi
+
+    assert _thinking_hex_to_ansi("#FF0000") == "\033[38;2;255;0;0m"
+    assert _thinking_hex_to_ansi(" #a1B2c3 ") == "\033[38;2;161;178;195m"
+    assert _thinking_hex_to_ansi("#GGGGGG") is None
+    assert _thinking_hex_to_ansi("red") is None
+    assert _thinking_hex_to_ansi("#FFF") is None
+    assert _thinking_hex_to_ansi("") is None
+    assert _thinking_hex_to_ansi(None) is None
+
+
+def test_all_five_classes_resolve_from_config(monkeypatch):
+    import hermes_cli.cli_stream_mixin as csm
+
+    monkeypatch.setattr(csm, "_thinking_config_overrides", lambda: {
+        "main": "#FF0000", "order": "#00FF00", "log": "#0000FF",
+        "pr": "#ABCDEF", "url": "#123456",
+    })
+    MAIN, ORDER, LOG, PR, URL = (
+        "\033[38;2;255;0;0m", "\033[38;2;0;255;0m", "\033[38;2;0;0;255m",
+        "\033[38;2;171;205;239m", "\033[38;2;18;52;86m",
+    )
+    line = _thinking_line("see §[2026-10-02], PR #123456, https://a.com/x and 1. item")
+    assert line == (
+        f"{MAIN}see {LOG}§[2026-10-02]{MAIN}, PR {PR}#123456{MAIN}, "
+        f"{URL}https://a.com/x{MAIN} and {ORDER}1.{MAIN} item{RST}"
+    )
+
+
+def test_partial_config_keeps_defaults_for_missing_keys(monkeypatch):
+    import hermes_cli.cli_stream_mixin as csm
+
+    monkeypatch.setattr(csm, "_thinking_config_overrides", lambda: {"main": "#FF0000"})
+    assert _thinking_line("go 1. then §[2026-10-02]") == (
+        f"\033[38;2;255;0;0mgo {_THINKING_ORANGE}1.\033[38;2;255;0;0m then "
+        f"{_THINKING_WHITE}§[2026-10-02]\033[38;2;255;0;0m{RST}"
+    )
+
+
+def test_invalid_config_values_fall_back_to_defaults(monkeypatch):
+    import hermes_cli.cli_stream_mixin as csm
+
+    monkeypatch.setattr(csm, "_thinking_config_overrides",
+                        lambda: {"main": "green", "order": "#12", "log": 42})
+    assert _thinking_line("1. §[2026-10-02]") == (
+        f"{_THINKING_GREEN}{_THINKING_ORANGE}1.{_THINKING_GREEN} "
+        f"{_THINKING_WHITE}§[2026-10-02]{_THINKING_GREEN}{RST}"
+    )
+
+
+def test_unreachable_config_falls_back_to_defaults(monkeypatch):
+    import hermes_cli.cli_stream_mixin as csm
+
+    def _boom():
+        raise RuntimeError("no cli module here")
+
+    monkeypatch.setattr(csm, "_thinking_config_overrides", _boom)
+    assert _thinking_line("plain") == f"{_THINKING_GREEN}plain{RST}"

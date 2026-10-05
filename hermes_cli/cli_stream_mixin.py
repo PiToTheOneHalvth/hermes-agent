@@ -39,10 +39,63 @@ _SLOW_COMMAND_STATUS_EXACT = {
 
 # Terminal showcase colors for reasoning text (user spec 2026-10-05): main text
 # is the Homebrew-terminal green (the Homebrew Terminal profile's TextColor),
-# order marks orange, log marks and PR numbers white.
-_THINKING_GREEN = "\033[38;2;40;254;20m"
-_THINKING_ORANGE = "\033[38;2;255;159;10m"
-_THINKING_WHITE = "\033[38;2;255;255;255m"
+# order marks orange, log marks, PR numbers and URLs white. The palette is
+# overridable per key via display.thinking_colors (`hermes config set
+# display.thinking_colors.main '#RRGGBB'`); invalid or missing values fall back
+# to these spec defaults.
+_THINKING_HEX_DEFAULTS = {
+    "main": "#28FE14",
+    "order": "#FF9F0A",
+    "log": "#FFFFFF",
+    "pr": "#FFFFFF",
+    "url": "#FFFFFF",
+}
+_HEX_COLOR_RE = re.compile(r"^\s*#[0-9a-fA-F]{6}\s*$")
+
+
+def _thinking_hex_to_ansi(value):
+    """#RRGGBB -> ANSI true-color foreground sequence; anything else -> None."""
+    if isinstance(value, str) and _HEX_COLOR_RE.match(value):
+        r, g, b = (int(value.strip()[i:i + 2], 16) for i in (1, 3, 5))
+        return f"\033[38;2;{r};{g};{b}m"
+    return None
+
+
+_THINKING_GREEN = _thinking_hex_to_ansi(_THINKING_HEX_DEFAULTS["main"])
+_THINKING_ORANGE = _thinking_hex_to_ansi(_THINKING_HEX_DEFAULTS["order"])
+_THINKING_WHITE = _thinking_hex_to_ansi(_THINKING_HEX_DEFAULTS["log"])
+
+
+def _thinking_config_overrides() -> dict:
+    """``display.thinking_colors`` from the live CLI config; {} when unset/unreachable."""
+    try:
+        from cli import CLI_CONFIG
+        overrides = (CLI_CONFIG or {}).get("display", {}).get("thinking_colors", {})
+        if isinstance(overrides, dict):
+            return overrides
+    except Exception:
+        pass
+    return {}
+
+
+def _thinking_colors() -> dict:
+    """Resolve the five showcase ANSI codes: config overrides over the spec defaults."""
+    try:
+        overrides = _thinking_config_overrides()
+    except Exception:
+        overrides = {}
+    colors = {
+        "main": _THINKING_GREEN,
+        "order": _THINKING_ORANGE,
+        "log": _THINKING_WHITE,
+        "pr": _THINKING_WHITE,
+        "url": _THINKING_WHITE,
+    }
+    for key in colors:
+        ansi = _thinking_hex_to_ansi(overrides.get(key))
+        if ansi:
+            colors[key] = ansi
+    return colors
 
 # §[2026-10-02] log marks, https://… website URLs, #123456 PR numbers, and
 # standalone 1. 2. 3. order marks. The § branch comes first so a mark
@@ -64,22 +117,30 @@ _THINKING_PARTIAL_TAIL_RE = re.compile(r"§\s*\[[^\]]*$|https?://\S*$|#\d{1,5}$|
 
 def _thinking_line(text: str) -> str:
     """Colorize one reasoning line: main text green, tokens per the showcase spec."""
+    colors = _thinking_colors()
+    main = colors["main"]
     parts: list[str] = []
     last = 0
     for match in _THINKING_TOKEN_RE.finditer(text):
         parts.append(text[last:match.start()])
         token = match.group(0)
-        # Sentence punctuation hugging a URL (https://x.com/a).) stays green.
+        # Sentence punctuation hugging a URL (https://x.com/a).) stays main-colored.
         suffix = ""
         if token.startswith(("http://", "https://")):
             stripped = token.rstrip(_THINKING_URL_TRAIL)
             suffix = token[len(stripped):]
             token = stripped
-        color = _THINKING_WHITE if token.startswith(("§", "#", "http")) else _THINKING_ORANGE
-        parts.append(f"{color}{token}{_THINKING_GREEN}")
+            color = colors["url"]
+        elif token.startswith("§"):
+            color = colors["log"]
+        elif token.startswith("#"):
+            color = colors["pr"]
+        else:
+            color = colors["order"]
+        parts.append(f"{color}{token}{main}")
         last = match.end() - len(suffix)
     parts.append(text[last:])
-    return f"{_THINKING_GREEN}{''.join(parts)}\033[0m"
+    return f"{main}{''.join(parts)}\033[0m"
 
 
 def _thinking_prefix() -> str:
