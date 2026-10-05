@@ -82,6 +82,49 @@ def test_two_digit_order_marks_still_claim():
         ("12.", ORANGE), (" twelve ", GREEN), ("99.", ORANGE), (" ninety-nine", GREEN)]
 
 
+def test_order_marks_after_parens_brackets_and_indent():
+    assert _colors(render_thinking_text("(1. step")) == [
+        ("(", GREEN), ("1.", ORANGE), (" step", GREEN)]
+    assert _colors(render_thinking_text("[1. step")) == [
+        ("[", GREEN), ("1.", ORANGE), (" step", GREEN)]
+    assert _colors(render_thinking_text("  1. step")) == [
+        ("  ", GREEN), ("1.", ORANGE), (" step", GREEN)]
+
+
+def test_order_mark_with_tab_or_double_space_after():
+    assert _colors(render_thinking_text("1.\tstep")) == [
+        ("1.", ORANGE), ("\tstep", GREEN)]
+    assert _colors(render_thinking_text("1.  double")) == [
+        ("1.", ORANGE), ("  double", GREEN)]
+
+
+def test_pr_number_needs_a_word_boundary():
+    assert _colors(render_thinking_text("see #123456x")) == [("see #123456x", GREEN)]
+    assert _colors(render_thinking_text("#123456 at start")) == [
+        ("#123456", WHITE), (" at start", GREEN)]
+
+
+def test_url_peels_multiple_trailing_punctuation():
+    assert _colors(render_thinking_text("See https://x.com/path).")) == [
+        ("See ", GREEN), ("https://x.com/path", WHITE), (").", GREEN)]
+    assert _colors(render_thinking_text("https://x.com...")) == [
+        ("https://x.com", WHITE), ("...", GREEN)]
+
+
+def test_url_keeps_balanced_parens_in_its_path():
+    assert _colors(render_thinking_text("(https://en.wikipedia.org/wiki/C_(programming_language))")) == [
+        ("(", GREEN), ("https://en.wikipedia.org/wiki/C_(programming_language)", WHITE), (")", GREEN)]
+
+
+def test_multiline_two_command_bullets_claim_each_dash():
+    assert _colors(render_thinking_text("- git fetch\n- hermes update")) == [
+        ("-", ORANGE), (" git fetch\n", GREEN), ("-", ORANGE), (" hermes update", GREEN)]
+
+
+def test_log_mark_with_embedded_newline_stays_prose():
+    assert _colors(render_thinking_text("§[text\nmore]")) == [("§[text\nmore]", GREEN)]
+
+
 def test_pr_number_needs_six_digits():
     assert _colors(render_thinking_text("see #12345")) == [("see #12345", GREEN)]
     assert _colors(render_thinking_text("see #123456")) == [
@@ -126,6 +169,10 @@ def test_a_fragment_no_rule_claims_renders_as_prose(partial):
     ("trailing 1.", "trailing "),
     ("trailing 12.", "trailing "),
     ("took ~57", "took ~57"),  # quantity prefix: never a mark, safe to paint
+    ("prefix 1. ", "prefix 1. "),  # order mark complete (space arrived)
+    ("Issue #", "Issue "),  # a bare # can still grow into a 6-digit PR
+    ("see #123456", "see "),  # 6+ digits could still gain a word char
+    ("Fixed #847 and more", "Fixed #847 and more"),  # space-terminated: complete
     ("see https://x.co", "see "),
     ("plain tail", "plain tail"),
 ])

@@ -10,7 +10,8 @@ log stamps / PR numbers / URLs go white.
 Every rule is deliberately narrow so the lookalikes stay prose: the order-mark
 rule needs trailing whitespace, at most two digits and no quantity prefix
 (``3.14``, ``v1.0.1``, ``2.5 hours`` and ``~570.`` do not match), the PR rule
-needs six digits (``#12345`` does not match), the command-bullet rule needs
+needs six digits and a word boundary (``#12345`` and ``#123456x`` do not
+match), the command-bullet rule needs
 the word after the dash to be a known shell command (``- git``, ``- hermes`` —
 not ``- checkout`` or a mid-line hyphen), and a URL span ends before the
 sentence punctuation that hugs it.
@@ -123,30 +124,36 @@ _TOKENS = re.compile(
     r"(?m)"
     r"(?P<log>§\s*\[[^\]\n]*\])"
     r"|(?P<url>https?://[^\s]+)"
-    r"|(?P<pr>\#\d{6,})"
+    r"|(?P<pr>\#\d{6,}\b)"
     r"|(?P<mark>(?<![\w.#~≈±])\d{1,2}\.(?=\s))"
-    r"|(?P<cmd>^[ \t]*-(?=[ \t]+(?P<cmdword>[a-z][a-z0-9._-]*)(?:[ \t]|$)))"
+    r"|(?P<cmd>^[ \t]*-(?=[ \t]+(?P<cmdword>[a-z][a-z0-9_-]*)(?:[ \t]|$)))"
 )
 
 _URL_TRAILING = ".,;:!?'\""
 _URL_BRACKETS = (("(", ")"), ("[", "]"), ("{", "}"))
+_URL_CLOSER_TO_OPENER = {closer: opener for opener, closer in _URL_BRACKETS}
 
 
 def _split_url(url: str) -> tuple[str, str]:
-    """Peel sentence punctuation off a URL span so it renders as prose."""
+    """Peel sentence punctuation off a URL span so it renders as prose.
+
+    Sentence punctuation peels one char at a time; a trailing bracket closer
+    peels only when the span does not balance it, so the ``)`` of
+    ``…/C_(programming_language)`` stays with the URL while ``…/a)`` loses it.
+    """
     end = len(url)
     while end:
         char = url[end - 1]
+        if char in _URL_CLOSER_TO_OPENER:
+            head = url[:end]
+            if head.count(_URL_CLOSER_TO_OPENER[char]) < head.count(char):
+                end -= 1
+                continue
+            break
         if char in _URL_TRAILING:
             end -= 1
             continue
-        unbalanced = any(
-            char == closer and url.count(opener) < url.count(closer)
-            for opener, closer in _URL_BRACKETS
-        )
-        if not unbalanced:
-            break
-        end -= 1
+        break
     return url[:end], url[end:]
 
 
@@ -217,12 +224,13 @@ def render_thinking_text(text: str, colors: dict[str, str] | None = None) -> str
 _PENDING = (
     re.compile(r"§\s*\[[^\]\n]*$"),
     re.compile(r"§\s*$"),
-    re.compile(r"\#\d{0,5}(?:\b|$)"),
+    re.compile(r"\#\d{0,5}$"),
+    re.compile(r"\#\d{6,}$"),
     re.compile(r"\bhttps?://[^\s]*$"),
     re.compile(r"\b(?:h|ht|htt|http|https|https:|https:/)$"),
     re.compile(r"(?<![\w.#~≈±])\d{1,2}\.$"),
     re.compile(r"(?m)^[ \t]*-[ \t]*$"),
-    re.compile(r"(?m)^[ \t]*-[ \t]+[a-z][a-z0-9._-]*$"),
+    re.compile(r"(?m)^[ \t]*-[ \t]+[a-z][a-z0-9_-]*$"),
 )
 
 
