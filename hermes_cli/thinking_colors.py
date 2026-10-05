@@ -8,11 +8,12 @@ marks go orange (as does a ``-`` list bullet right before a shell command), and
 log stamps / PR numbers / URLs go white.
 
 Every rule is deliberately narrow so the lookalikes stay prose: the order-mark
-rule needs trailing whitespace (``3.14``, ``v1.0.1`` and ``2.5 hours`` do not
-match), the PR rule needs six digits (``#12345`` does not match), the
-command-bullet rule needs the word after the dash to be a known shell command
-(``- git``, ``- hermes`` — not ``- checkout`` or a mid-line hyphen), and a URL
-span ends before the sentence punctuation that hugs it.
+rule needs trailing whitespace, at most two digits and no quantity prefix
+(``3.14``, ``v1.0.1``, ``2.5 hours`` and ``~570.`` do not match), the PR rule
+needs six digits (``#12345`` does not match), the command-bullet rule needs
+the word after the dash to be a known shell command (``- git``, ``- hermes`` —
+not ``- checkout`` or a mid-line hyphen), and a URL span ends before the
+sentence punctuation that hugs it.
 
 The palette is configurable per class via ``display.thinking_colors`` (hex
 ``#RRGGBB``, ``hermes config set display.thinking_colors.main '#FF0000'``);
@@ -123,7 +124,7 @@ _TOKENS = re.compile(
     r"(?P<log>§\s*\[[^\]\n]*\])"
     r"|(?P<url>https?://[^\s]+)"
     r"|(?P<pr>\#\d{6,})"
-    r"|(?P<mark>\b\d{1,3}\.(?=\s))"
+    r"|(?P<mark>(?<![\w.#~≈±])\d{1,2}\.(?=\s))"
     r"|(?P<cmd>^[ \t]*-(?=[ \t]+(?P<cmdword>[a-z][a-z0-9._-]*)(?:[ \t]|$)))"
 )
 
@@ -219,7 +220,7 @@ _PENDING = (
     re.compile(r"\#\d{0,5}(?:\b|$)"),
     re.compile(r"\bhttps?://[^\s]*$"),
     re.compile(r"\b(?:h|ht|htt|http|https|https:|https:/)$"),
-    re.compile(r"\b\d{1,3}\.$"),
+    re.compile(r"(?<![\w.#~≈±])\d{1,2}\.$"),
     re.compile(r"(?m)^[ \t]*-[ \t]*$"),
     re.compile(r"(?m)^[ \t]*-[ \t]+[a-z][a-z0-9._-]*$"),
 )

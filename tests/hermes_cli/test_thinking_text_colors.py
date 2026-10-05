@@ -68,6 +68,20 @@ def test_order_mark_is_orange_and_the_lookalikes_stay_green():
             assert expected in spans, (text, spans)
 
 
+def test_quantity_lookalikes_stay_green():
+    # "~570." is an approximate count, not an order mark; three-digit
+    # "100." items are not order marks either.
+    assert _colors(render_thinking_text("old ~1000; new ~570. File shrinks.")) == [
+        ("old ~1000; new ~570. File shrinks.", GREEN)]
+    assert _colors(render_thinking_text("≈42. done")) == [("≈42. done", GREEN)]
+    assert _colors(render_thinking_text("100. item")) == [("100. item", GREEN)]
+
+
+def test_two_digit_order_marks_still_claim():
+    assert _colors(render_thinking_text("12. twelve 99. ninety-nine")) == [
+        ("12.", ORANGE), (" twelve ", GREEN), ("99.", ORANGE), (" ninety-nine", GREEN)]
+
+
 def test_pr_number_needs_six_digits():
     assert _colors(render_thinking_text("see #12345")) == [("see #12345", GREEN)]
     assert _colors(render_thinking_text("see #123456")) == [
@@ -110,6 +124,8 @@ def test_a_fragment_no_rule_claims_renders_as_prose(partial):
     ("§[2026-10-0", ""),
     ("#12345", ""),
     ("trailing 1.", "trailing "),
+    ("trailing 12.", "trailing "),
+    ("took ~57", "took ~57"),  # quantity prefix: never a mark, safe to paint
     ("see https://x.co", "see "),
     ("plain tail", "plain tail"),
 ])
