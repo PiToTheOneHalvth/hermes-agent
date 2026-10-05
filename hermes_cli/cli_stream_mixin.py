@@ -47,10 +47,11 @@ _THINKING_WHITE = "\033[38;2;255;255;255m"
 # §[2026-10-02] log marks, https://… website URLs, #123456 PR numbers, and
 # standalone 1. 2. 3. order marks. The § branch comes first so a mark
 # containing a PR number stays one span, and the URL branch precedes the
-# PR branch so a URL with a #fragment stays one span; \b keeps decimals
-# (3.14) and versions (v1.0.1) out of the number branch, and (?=\s) keeps
-# "2.5 hours" out too.
-_THINKING_TOKEN_RE = re.compile(r"§\s*\[[^\]]*\]|https?://\S+|#\d{6,}\b|\b\d{1,3}\.(?=\s)")
+# PR branch so a URL with a #fragment stays one span. The order-mark branch
+# is preceded by nothing word-like or dotted ((?<![\w.#])) so decimals
+# (3.14), versions (v1.0.1, python-3.14.7.), and hash runs stay green;
+# (?=\s) keeps "2.5 hours" out too.
+_THINKING_TOKEN_RE = re.compile(r"§\s*\[[^\]]*\]|https?://\S+|#\d{6,}\b|(?<![\w.#])\d{1,3}\.(?=\s)")
 
 # Trailing sentence punctuation that stays green when it follows a URL.
 _THINKING_URL_TRAIL = ".,;:!?)]}'\""
@@ -58,7 +59,7 @@ _THINKING_URL_TRAIL = ".,;:!?)]}'\""
 # A token the colorizer needs in one piece must not be split across two
 # prints, or its second half renders plain green. Matches the START of an
 # incomplete tail token (used to cut the live box's force-flush before it).
-_THINKING_PARTIAL_TAIL_RE = re.compile(r"§\s*\[[^\]]*$|https?://\S*$|#\d{1,5}$|(?<![\d.#])\d{1,3}\.$")
+_THINKING_PARTIAL_TAIL_RE = re.compile(r"§\s*\[[^\]]*$|https?://\S*$|#\d{1,5}$|(?<![\w.#])\d{1,3}\.$")
 
 
 def _thinking_line(text: str) -> str:

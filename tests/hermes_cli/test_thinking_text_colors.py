@@ -62,6 +62,19 @@ def test_decimals_and_versions_stay_green():
     assert line == f"{_THINKING_GREEN}pi 3.14, v1.0.1, 2.5 hours{RST}"
 
 
+def test_version_tail_with_sentence_period_stays_green():
+    # "7." in "python-3.14.7." is a version digit + period, not an order mark.
+    line = _thinking_line("runtime is python-3.14.7. Done.")
+    assert _THINKING_ORANGE not in line
+    assert line == f"{_THINKING_GREEN}runtime is python-3.14.7. Done.{RST}"
+
+
+def test_letter_adjacent_number_mark_stays_green():
+    line = _thinking_line("file x1. step and a17. step")
+    assert _THINKING_ORANGE not in line
+    assert line == f"{_THINKING_GREEN}file x1. step and a17. step{RST}"
+
+
 def test_section_mark_containing_pr_number_is_one_white_span():
     assert _thinking_line("x §[#123456] y") == (
         f"{_THINKING_GREEN}x {_THINKING_WHITE}§[#123456]{_THINKING_GREEN} y{RST}"
@@ -101,6 +114,8 @@ def test_website_url_with_pr_fragment_is_one_white_span():
         ("plain tail", None),
         ("at https://example.com/a", "https://example.com/a"),
         ("done https://example.com/a ", None),
+        ("python-3.14.7.", None),
+        ("step 1.", "1."),
     ],
 )
 def test_partial_tail_detection(buffer, expected):
