@@ -133,6 +133,71 @@ def test_spans_preserve_the_original_text_exactly():
     assert "".join(chunk for chunk, _ in thinking_spans(text)) == text
 
 
+# ---- Command bullets: "-" before a known shell command is orange ----
+
+def test_command_bullet_is_orange_before_a_known_command():
+    for text in (
+        "- git fetch",
+        "- pgrep -l Hermes",
+        "- hermes update --plan (read-only)",
+        "  - git status",  # the indentation stays prose, only the dash claims
+    ):
+        spans = _colors(render_thinking_text(text))
+        assert ("-", ORANGE) in spans, (text, spans)
+
+
+def test_command_bullet_only_colours_the_dash():
+    assert _colors(render_thinking_text("- git fetch")) == [
+        ("-", ORANGE), (" git fetch", GREEN)]
+    assert _colors(render_thinking_text("  - git status")) == [
+        ("  ", GREEN), ("-", ORANGE), (" git status", GREEN)]
+
+
+def test_non_command_bullets_stay_prose():
+    for text in (
+        "- checkout the notes",     # not a known command word
+        "- the file was changed",   # prose bullet
+        "- Check the repo",         # capitalized first word
+        "- git.",                   # trailing punctuation = sentence, not a command
+        "- 2.5 hours left",         # number first
+    ):
+        assert _colors(render_thinking_text(text)) == [(text, GREEN)], text
+
+
+def test_mid_line_hyphens_never_claim():
+    assert _colors(render_thinking_text("re-test with - git flow")) == [
+        ("re-test with - git flow", GREEN)]
+    assert _colors(render_thinking_text("fail-soft")) == [("fail-soft", GREEN)]
+
+
+def test_command_bullet_claims_per_line_in_multiline_text():
+    assert _colors(render_thinking_text("- git fetch\n- notes here")) == [
+        ("-", ORANGE), (" git fetch\n- notes here", GREEN)]
+
+
+def test_cmd_is_an_independent_knob(monkeypatch):
+    monkeypatch.setattr(tc, "_thinking_config_overrides", lambda: {"cmd": "#654321"})
+    assert _colors(render_thinking_text("- git fetch")) == [
+        ("-", "\x1b[38;2;101;67;33m"), (" git fetch", GREEN)]
+
+
+@pytest.mark.parametrize("buffered,ready", [
+    ("open\n- ", "open\n"),
+    ("open\n- gi", "open\n"),
+    ("open\n- git", "open\n"),
+])
+def test_stream_holds_back_a_command_bullet_until_its_word_is_terminated(buffered, ready):
+    assert split_safe_stream(buffered) == (ready, buffered[len(ready):])
+
+
+def test_command_bullet_paints_once_the_word_completes():
+    first, held = split_safe_stream("run\n- git")
+    assert (first, held) == ("run\n", "- git")
+    assert _colors(render_thinking_text(first)) == [("run\n", GREEN)]
+    assert _colors(render_thinking_text(held + " fetch")) == [
+        ("-", ORANGE), (" git fetch", GREEN)]
+
+
 @pytest.fixture
 def reasoning_cli(monkeypatch):
     """CLI stub with the reasoning-box state the three surfaces read."""
@@ -206,16 +271,17 @@ def test_live_box_flushes_an_unbroken_run_instead_of_going_silent(reasoning_cli)
 import hermes_cli.thinking_colors as tc  # noqa: E402
 
 
-def test_all_five_classes_resolve_from_config(monkeypatch):
+def test_all_classes_resolve_from_config(monkeypatch):
     monkeypatch.setattr(
         tc, "_thinking_config_overrides",
-        lambda: {"main": "#111111", "order": "#222222", "log": "#333333",
-                 "pr": "#444444", "url": "#555555"},
+        lambda: {"main": "#111111", "order": "#222222", "cmd": "#666666",
+                 "log": "#333333", "pr": "#444444", "url": "#555555"},
     )
     colors = tc.resolve_showcase_colors()
     assert colors == {
         "main": "\x1b[38;2;17;17;17m",
         "order": "\x1b[38;2;34;34;34m",
+        "cmd": "\x1b[38;2;102;102;102m",
         "log": "\x1b[38;2;51;51;51m",
         "pr": "\x1b[38;2;68;68;68m",
         "url": "\x1b[38;2;85;85;85m",
@@ -227,16 +293,19 @@ def test_partial_config_keeps_defaults_for_missing_keys(monkeypatch):
     colors = tc.resolve_showcase_colors()
     assert colors["main"] == "\x1b[38;2;255;0;0m"
     assert colors["order"] == ORANGE  # spec default
+    assert colors["cmd"] == ORANGE  # spec default
 
 
 def test_invalid_config_values_fall_back_to_defaults(monkeypatch):
     monkeypatch.setattr(
         tc, "_thinking_config_overrides",
-        lambda: {"main": "red", "order": "#12", "log": 123, "pr": None, "url": "#GGGGGG"},
+        lambda: {"main": "red", "order": "#12", "cmd": "#GGGGGG", "log": 123,
+                 "pr": None, "url": "#GGGGGG"},
     )
     colors = tc.resolve_showcase_colors()
     assert colors["main"] == GREEN
     assert colors["order"] == ORANGE
+    assert colors["cmd"] == ORANGE
     assert colors["log"] == WHITE
     assert colors["pr"] == WHITE
     assert colors["url"] == WHITE

@@ -4,12 +4,15 @@ Thinking text used to be painted with one uniform ``_DIM`` sequence, so an order
 mark, a log stamp, a PR number and ordinary prose were indistinguishable in the
 scrollback. This module splits a line of thinking text into spans and gives each
 class its own foreground: prose stays in the terminal's Homebrew green, order
-marks go orange, and log stamps / PR numbers / URLs go white.
+marks go orange (as does a ``-`` list bullet right before a shell command), and
+log stamps / PR numbers / URLs go white.
 
 Every rule is deliberately narrow so the lookalikes stay prose: the order-mark
 rule needs trailing whitespace (``3.14``, ``v1.0.1`` and ``2.5 hours`` do not
-match), the PR rule needs six digits (``#12345`` does not match), and a URL span
-ends before the sentence punctuation that hugs it.
+match), the PR rule needs six digits (``#12345`` does not match), the
+command-bullet rule needs the word after the dash to be a known shell command
+(``- git``, ``- hermes`` — not ``- checkout`` or a mid-line hyphen), and a URL
+span ends before the sentence punctuation that hugs it.
 
 The palette is configurable per class via ``display.thinking_colors`` (hex
 ``#RRGGBB``, ``hermes config set display.thinking_colors.main '#FF0000'``);
@@ -37,6 +40,7 @@ SHOWCASE_WHITE = "#FFFFFF"
 _THINKING_HEX_DEFAULTS = {
     "main": SHOWCASE_GREEN,  # prose
     "order": SHOWCASE_ORANGE,  # 1. 2. 3. order marks
+    "cmd": SHOWCASE_ORANGE,  # "-" list bullets before shell commands
     "log": SHOWCASE_WHITE,  # §[2026-10-02] log marks
     "pr": SHOWCASE_WHITE,  # #123456 PR numbers (6+ digits)
     "url": SHOWCASE_WHITE,  # https://… (matched through the #fragment)
@@ -70,7 +74,7 @@ def _thinking_config_overrides() -> dict:
 
 
 def resolve_showcase_colors() -> dict[str, str]:
-    """The five showcase ANSI codes: config overrides over the spec defaults."""
+    """The showcase ANSI codes: config overrides over the spec defaults."""
     try:
         overrides = _thinking_config_overrides()
     except Exception:
@@ -84,14 +88,43 @@ def resolve_showcase_colors() -> dict[str, str]:
             colors[key] = _sgr(default)
     return colors
 
+
+# Shell commands whose "-" list bullets claim the command colour. Curated on
+# purpose: prose lookalikes ("- check", "- test", "- more …") stay out, so a
+# bullet only claims when it really prefixes a command line.
+_COMMAND_WORDS = frozenset(
+    """apk apt apt-get awk aws base64 biber black brew bundle bun caffeinate
+    cargo cat cd chgrp chmod chown clang claude cmake code codex composer
+    conda coverage cp crontab curl cut defaults deno df dmesg diff diskutil
+    ditto docker docker-compose dotnet du dnf emacs fd ffmpeg ffprobe flake8
+    gcc gcloud gem gh git git-lfs glab go gofmt gradle grep gunzip gzip hatch
+    helm hermes hostname htop id iostat ipython irb isort java javac journalctl
+    jq jupyter kill killall kubectl latex latexmk launchctl ln ls lsof lua
+    lualatex make mamba micromamba mdfind md5 md5sum mdls mdutil mkdir mvn mv
+    mypy mysql nano nc nvim nox node npm npx openssl open osascript otool
+    pacman pandoc pbcopy pbpaste pdflatex pdm perl php pgrep ping pip pip3 pipx
+    pkill plutil podman poetry pre-commit ps psql pwd py pyright pytest python
+    python3 rake redis-cli rg rmdir rm rsync ruby ruff rustc rustup rye scp
+    security sed shasum sha256sum sips sort sqlite3 ssh ssh-add ssh-copy-id
+    ssh-keygen swift sw_vers sysctl scutil systemctl service tar tee tmux
+    touch tox tr tsc typst uname uniq unzip uptime uv venv vim vi virtualenv
+    vm_stat wc wget whoami xargs xcodebuild xcrun xelatex yarn yq yt-dlp
+    youtube-dl yum zip zed""".split()
+)
+
 # Alternation order is the precedence order: a log stamp is claimed whole (so
 # ``§[#123456]`` is one white span, not white-inside-white), and a URL is claimed
-# before the PR rule so a ``#fragment`` never splits off on its own.
+# before the PR rule so a ``#fragment`` never splits off on its own. The command
+# bullet comes last: it matches only the ``-`` itself (the word after it is a
+# lookahead group), and the span is painted only when that word is a known
+# shell command.
 _TOKENS = re.compile(
+    r"(?m)"
     r"(?P<log>§\s*\[[^\]\n]*\])"
     r"|(?P<url>https?://[^\s]+)"
     r"|(?P<pr>\#\d{6,})"
     r"|(?P<mark>\b\d{1,3}\.(?=\s))"
+    r"|(?P<cmd>^[ \t]*-(?=[ \t]+(?P<cmdword>[a-z][a-z0-9._-]*)(?:[ \t]|$)))"
 )
 
 _URL_TRAILING = ".,;:!?'\""
@@ -137,6 +170,13 @@ def thinking_spans(text: str) -> list[tuple[str, str | None]]:
                 spans.append((tail, None))
         elif kind == "mark":
             spans.append((raw, "order"))
+        elif kind == "cmd":
+            # ``lastgroup`` names the outer ``cmd`` group — groups inside a
+            # lookahead do not count — so read the captured word explicitly.
+            if len(raw) > 1:
+                spans.append((raw[:-1], None))  # indentation before the bullet
+            word = match.group("cmdword")
+            spans.append(("-", "cmd") if word in _COMMAND_WORDS else ("-", None))
         else:  # log, pr
             spans.append((raw, kind))
         position = match.end()
@@ -170,6 +210,9 @@ def render_thinking_text(text: str, colors: dict[str, str] | None = None) -> str
 # Fragments that could still grow into a token: holding them back keeps a
 # half-arrived ``§[2026-10-0``, ``#12345`` or ``https://x.co`` plain prose
 # instead of committing to a colour that the rest of the token may contradict.
+# A line-leading ``-`` is held until the word after it is terminated (space or
+# newline) so a bullet is never painted orange before we know that word really
+# is a shell command.
 _PENDING = (
     re.compile(r"§\s*\[[^\]\n]*$"),
     re.compile(r"§\s*$"),
@@ -177,6 +220,8 @@ _PENDING = (
     re.compile(r"\bhttps?://[^\s]*$"),
     re.compile(r"\b(?:h|ht|htt|http|https|https:|https:/)$"),
     re.compile(r"\b\d{1,3}\.$"),
+    re.compile(r"(?m)^[ \t]*-[ \t]*$"),
+    re.compile(r"(?m)^[ \t]*-[ \t]+[a-z][a-z0-9._-]*$"),
 )
 
 

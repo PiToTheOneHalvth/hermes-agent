@@ -2201,6 +2201,7 @@ display:
   thinking_colors:
     main: "#28FE14"       # prose (Homebrew-terminal green)
     order: "#FF9F0A"      # list order marks ("1." "2.")
+    cmd: "#FF9F0A"        # "-" bullets before shell commands
     log: "#FFFFFF"        # §[2026-10-02] log marks
     pr: "#FFFFFF"         # #123456 PR numbers (6+ digits)
     url: "#FFFFFF"        # https://… (matched through the #fragment)
@@ -2225,11 +2226,12 @@ display:
 
 ### Thinking showcase colors
 
-The CLI renders streamed/buffered thinking text — the buffered `[thinking]` preview and the live reasoning box — as a colored "showcase": prose in the main color, with list order marks (`1.` `2.`), `§[...]` log marks, `#123456` PR numbers, and URLs each in their own color. The palette is configurable per class via `display.thinking_colors` (hex `#RRGGBB`); invalid or missing values fall back per key to the defaults above, so rendering never breaks on a bad value. The final assistant answer, the `[thinking]` label, and the box borders are unchanged, and this is terminal-only — the desktop app renders its own thinking styling.
+The CLI renders streamed/buffered thinking text — the buffered `[thinking]` preview and the live reasoning box — as a colored "showcase": prose in the main color, with list order marks (`1.` `2.`), `-` list bullets before shell commands (`- git`, `- hermes`), `§[...]` log marks, `#123456` PR numbers, and URLs each in their own color. The palette is configurable per class via `display.thinking_colors` (hex `#RRGGBB`); invalid or missing values fall back per key to the defaults above, so rendering never breaks on a bad value. The final assistant answer, the `[thinking]` label, and the box borders are unchanged, and this is terminal-only — the desktop app renders its own thinking styling.
 
 ```bash
 hermes config set display.thinking_colors.main '#FF0000'   # prose
 hermes config set display.thinking_colors.order '#FF9F0A'  # 1. 2. 3.
+hermes config set display.thinking_colors.cmd '#FF9F0A'    # - git, - hermes
 hermes config set display.thinking_colors.log '#FFFFFF'    # §[2026-10-02]
 hermes config set display.thinking_colors.pr '#FFFFFF'     # #123456
 hermes config set display.thinking_colors.url '#FFFFFF'    # https://…
