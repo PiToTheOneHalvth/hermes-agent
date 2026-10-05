@@ -199,3 +199,69 @@ def test_live_box_flushes_an_unbroken_run_instead_of_going_silent(reasoning_cli)
     cli._stream_reasoning_delta("y" * 900)
     cli._close_reasoning_box()
     assert "y" in _body(emitted)
+
+
+# ---- Config knob: display.thinking_colors overrides the spec palette ----
+
+import hermes_cli.thinking_colors as tc  # noqa: E402
+
+
+def test_all_five_classes_resolve_from_config(monkeypatch):
+    monkeypatch.setattr(
+        tc, "_thinking_config_overrides",
+        lambda: {"main": "#111111", "order": "#222222", "log": "#333333",
+                 "pr": "#444444", "url": "#555555"},
+    )
+    colors = tc.resolve_showcase_colors()
+    assert colors == {
+        "main": "\x1b[38;2;17;17;17m",
+        "order": "\x1b[38;2;34;34;34m",
+        "log": "\x1b[38;2;51;51;51m",
+        "pr": "\x1b[38;2;68;68;68m",
+        "url": "\x1b[38;2;85;85;85m",
+    }
+
+
+def test_partial_config_keeps_defaults_for_missing_keys(monkeypatch):
+    monkeypatch.setattr(tc, "_thinking_config_overrides", lambda: {"main": "#FF0000"})
+    colors = tc.resolve_showcase_colors()
+    assert colors["main"] == "\x1b[38;2;255;0;0m"
+    assert colors["order"] == ORANGE  # spec default
+
+
+def test_invalid_config_values_fall_back_to_defaults(monkeypatch):
+    monkeypatch.setattr(
+        tc, "_thinking_config_overrides",
+        lambda: {"main": "red", "order": "#12", "log": 123, "pr": None, "url": "#GGGGGG"},
+    )
+    colors = tc.resolve_showcase_colors()
+    assert colors["main"] == GREEN
+    assert colors["order"] == ORANGE
+    assert colors["log"] == WHITE
+    assert colors["pr"] == WHITE
+    assert colors["url"] == WHITE
+
+
+def test_unreachable_config_falls_back_to_defaults(monkeypatch):
+    def _boom():
+        raise RuntimeError("no config")
+    monkeypatch.setattr(tc, "_thinking_config_overrides", _boom)
+    colors = tc.resolve_showcase_colors()
+    assert colors["main"] == GREEN and colors["log"] == WHITE
+
+
+def test_knob_changes_rendered_spans(monkeypatch):
+    monkeypatch.setattr(tc, "_thinking_config_overrides", lambda: {"log": "#FF0000"})
+    assert _colors(render_thinking_text("§[2026-10-02] done")) == [
+        ("§[2026-10-02]", "\x1b[38;2;255;0;0m"), (" done", GREEN)]
+
+
+def test_log_pr_url_are_independent_knobs(monkeypatch):
+    monkeypatch.setattr(
+        tc, "_thinking_config_overrides",
+        lambda: {"log": "#333333", "pr": "#444444", "url": "#555555"},
+    )
+    assert _colors(render_thinking_text("§[t] #123456 https://x.co ok")) == [
+        ("§[t]", "\x1b[38;2;51;51;51m"), (" ", GREEN),
+        ("#123456", "\x1b[38;2;68;68;68m"), (" ", GREEN),
+        ("https://x.co", "\x1b[38;2;85;85;85m"), (" ok", GREEN)]

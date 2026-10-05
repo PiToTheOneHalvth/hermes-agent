@@ -11,6 +11,11 @@ rule needs trailing whitespace (``3.14``, ``v1.0.1`` and ``2.5 hours`` do not
 match), the PR rule needs six digits (``#12345`` does not match), and a URL span
 ends before the sentence punctuation that hugs it.
 
+The palette is configurable per class via ``display.thinking_colors`` (hex
+``#RRGGBB``, ``hermes config set display.thinking_colors.main '#FF0000'``);
+each key falls back to its spec default independently, so a bad or missing
+value never breaks rendering.
+
 :class:`split_safe_stream` is the streaming half: a token that has only partly
 arrived renders as plain prose rather than guessing, and the live box cuts its
 buffer before the oldest such fragment so no token is ever painted twice under
@@ -26,6 +31,18 @@ SHOWCASE_GREEN = "#28FE14"
 SHOWCASE_ORANGE = "#FF9F0A"
 SHOWCASE_WHITE = "#FFFFFF"
 
+# Per-class defaults (the showcase palette). ``display.thinking_colors`` in the
+# live CLI config overrides these per key; an invalid or missing value falls
+# back to that key's default only, so rendering never breaks on a bad value.
+_THINKING_HEX_DEFAULTS = {
+    "main": SHOWCASE_GREEN,  # prose
+    "order": SHOWCASE_ORANGE,  # 1. 2. 3. order marks
+    "log": SHOWCASE_WHITE,  # §[2026-10-02] log marks
+    "pr": SHOWCASE_WHITE,  # #123456 PR numbers (6+ digits)
+    "url": SHOWCASE_WHITE,  # https://… (matched through the #fragment)
+}
+_HEX_COLOR_RE = re.compile(r"^\s*#[0-9a-fA-F]{6}\s*$")
+
 
 def _sgr(hex_color: str) -> str:
     """True-colour SGR sequence for '#RRGGBB'."""
@@ -38,7 +55,34 @@ _ORANGE = _sgr(SHOWCASE_ORANGE)
 _WHITE = _sgr(SHOWCASE_WHITE)
 _RST = "\x1b[0m"
 
-_COLORS = {"white": _WHITE, "orange": _ORANGE}
+
+def _thinking_config_overrides() -> dict:
+    """``display.thinking_colors`` from the live CLI config; {} when unset/unreachable."""
+    try:
+        from cli import CLI_CONFIG
+
+        overrides = (CLI_CONFIG or {}).get("display", {}).get("thinking_colors", {})
+        if isinstance(overrides, dict):
+            return overrides
+    except Exception:
+        pass
+    return {}
+
+
+def resolve_showcase_colors() -> dict[str, str]:
+    """The five showcase ANSI codes: config overrides over the spec defaults."""
+    try:
+        overrides = _thinking_config_overrides()
+    except Exception:
+        overrides = {}
+    colors: dict[str, str] = {}
+    for key, default in _THINKING_HEX_DEFAULTS.items():
+        value = overrides.get(key)
+        if isinstance(value, str) and _HEX_COLOR_RE.match(value):
+            colors[key] = _sgr(value)
+        else:
+            colors[key] = _sgr(default)
+    return colors
 
 # Alternation order is the precedence order: a log stamp is claimed whole (so
 # ``§[#123456]`` is one white span, not white-inside-white), and a URL is claimed
@@ -88,13 +132,13 @@ def thinking_spans(text: str) -> list[tuple[str, str | None]]:
         raw = match.group()
         if kind == "url":
             body, tail = _split_url(raw)
-            spans.append((body, "white"))
+            spans.append((body, "url"))
             if tail:
                 spans.append((tail, None))
         elif kind == "mark":
-            spans.append((raw, "orange"))
-        else:
-            spans.append((raw, "white"))
+            spans.append((raw, "order"))
+        else:  # log, pr
+            spans.append((raw, kind))
         position = match.end()
     if position < len(text or ""):
         spans.append((text[position:], None))
@@ -108,10 +152,16 @@ def thinking_spans(text: str) -> list[tuple[str, str | None]]:
     return merged
 
 
-def render_thinking_text(text: str) -> str:
-    """Colourise a finished piece of thinking text."""
+def render_thinking_text(text: str, colors: dict[str, str] | None = None) -> str:
+    """Colourise a finished piece of thinking text.
+
+    ``colors`` is the resolved palette (see :func:`resolve_showcase_colors`); when
+    omitted it is resolved per call, so a ``display.thinking_colors`` change applies
+    without a restart.
+    """
+    palette = colors or resolve_showcase_colors()
     return "".join(
-        f"{_COLORS.get(color, _GREEN)}{chunk}{_RST}"
+        f"{palette[color or 'main']}{chunk}{_RST}"
         for chunk, color in thinking_spans(text)
         if chunk
     )
