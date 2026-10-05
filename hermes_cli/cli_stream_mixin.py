@@ -44,16 +44,21 @@ _THINKING_GREEN = "\033[38;2;40;254;20m"
 _THINKING_ORANGE = "\033[38;2;255;159;10m"
 _THINKING_WHITE = "\033[38;2;255;255;255m"
 
-# §[2026-10-02] log marks, #123456 PR numbers, and standalone 1. 2. 3. order
-# marks. The § branch comes first so a mark containing a PR number stays one
-# span; \b keeps decimals (3.14) and versions (v1.0.1) out of the number
-# branch, and (?=\s) keeps "2.5 hours" out too.
-_THINKING_TOKEN_RE = re.compile(r"§\s*\[[^\]]*\]|#\d{6,}\b|\b\d{1,3}\.(?=\s)")
+# §[2026-10-02] log marks, https://… website URLs, #123456 PR numbers, and
+# standalone 1. 2. 3. order marks. The § branch comes first so a mark
+# containing a PR number stays one span, and the URL branch precedes the
+# PR branch so a URL with a #fragment stays one span; \b keeps decimals
+# (3.14) and versions (v1.0.1) out of the number branch, and (?=\s) keeps
+# "2.5 hours" out too.
+_THINKING_TOKEN_RE = re.compile(r"§\s*\[[^\]]*\]|https?://\S+|#\d{6,}\b|\b\d{1,3}\.(?=\s)")
+
+# Trailing sentence punctuation that stays green when it follows a URL.
+_THINKING_URL_TRAIL = ".,;:!?)]}'\""
 
 # A token the colorizer needs in one piece must not be split across two
 # prints, or its second half renders plain green. Matches the START of an
 # incomplete tail token (used to cut the live box's force-flush before it).
-_THINKING_PARTIAL_TAIL_RE = re.compile(r"§\s*\[[^\]]*$|#\d{1,5}$|(?<![\d.#])\d{1,3}\.$")
+_THINKING_PARTIAL_TAIL_RE = re.compile(r"§\s*\[[^\]]*$|https?://\S*$|#\d{1,5}$|(?<![\d.#])\d{1,3}\.$")
 
 
 def _thinking_line(text: str) -> str:
@@ -63,9 +68,15 @@ def _thinking_line(text: str) -> str:
     for match in _THINKING_TOKEN_RE.finditer(text):
         parts.append(text[last:match.start()])
         token = match.group(0)
-        color = _THINKING_WHITE if token.startswith(("§", "#")) else _THINKING_ORANGE
+        # Sentence punctuation hugging a URL (https://x.com/a).) stays green.
+        suffix = ""
+        if token.startswith(("http://", "https://")):
+            stripped = token.rstrip(_THINKING_URL_TRAIL)
+            suffix = token[len(stripped):]
+            token = stripped
+        color = _THINKING_WHITE if token.startswith(("§", "#", "http")) else _THINKING_ORANGE
         parts.append(f"{color}{token}{_THINKING_GREEN}")
-        last = match.end()
+        last = match.end() - len(suffix)
     parts.append(text[last:])
     return f"{_THINKING_GREEN}{''.join(parts)}\033[0m"
 

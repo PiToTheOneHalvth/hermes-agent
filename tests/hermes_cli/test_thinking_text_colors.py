@@ -68,6 +68,25 @@ def test_section_mark_containing_pr_number_is_one_white_span():
     )
 
 
+def test_website_url_is_white():
+    assert _thinking_line("see https://example.com/x for more") == (
+        f"{_THINKING_GREEN}see {_THINKING_WHITE}https://example.com/x{_THINKING_GREEN} for more{RST}"
+    )
+
+
+def test_website_url_trailing_punctuation_stays_green():
+    assert _thinking_line("(https://example.com/a).") == (
+        f"{_THINKING_GREEN}({_THINKING_WHITE}https://example.com/a{_THINKING_GREEN}).{RST}"
+    )
+
+
+def test_website_url_with_pr_fragment_is_one_white_span():
+    assert _thinking_line("x https://github.com/a/issues/133125#top y") == (
+        f"{_THINKING_GREEN}x {_THINKING_WHITE}https://github.com/a/issues/133125#top"
+        f"{_THINKING_GREEN} y{RST}"
+    )
+
+
 @pytest.mark.parametrize(
     ("buffer", "expected"),
     [
@@ -80,6 +99,8 @@ def test_section_mark_containing_pr_number_is_one_white_span():
         ("PR #123456", None),
         ("value 3.1", None),
         ("plain tail", None),
+        ("at https://example.com/a", "https://example.com/a"),
+        ("done https://example.com/a ", None),
     ],
 )
 def test_partial_tail_detection(buffer, expected):
