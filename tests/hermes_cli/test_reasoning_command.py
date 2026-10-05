@@ -8,9 +8,15 @@ Combines functionality from:
 - PR #790 (0xbyt4): reasoning display toggle and rendering
 """
 
+import re
 import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+
+
+def _plain(text: str) -> str:
+    """Strip ANSI SGR codes so assertions compare visible text."""
+    return re.sub(r"\x1b\[[0-9;]*m", "", text)
 
 
 # ---------------------------------------------------------------------------
@@ -211,7 +217,7 @@ class TestReasoningPreviewBuffering(unittest.TestCase):
         cli._on_reasoning(" about this.\n")
 
         self.assertEqual(mock_cprint.call_count, 1)
-        rendered = mock_cprint.call_args[0][0]
+        rendered = _plain(mock_cprint.call_args[0][0])
         self.assertIn("[thinking] Let me think about this.", rendered)
 
     @patch("cli._cprint")
@@ -229,7 +235,7 @@ class TestReasoningPreviewBuffering(unittest.TestCase):
         cli._on_thinking("")
 
         self.assertEqual(mock_cprint.call_count, 1)
-        rendered = mock_cprint.call_args[0][0]
+        rendered = _plain(mock_cprint.call_args[0][0])
         self.assertIn("[thinking] see how this plays out", rendered)
 
 

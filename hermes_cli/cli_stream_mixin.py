@@ -37,6 +37,38 @@ _SLOW_COMMAND_STATUS_EXACT = {
     "/reload-skills": "cli.stream.busy_reload_skills",
     "/reload_skills": "cli.stream.busy_reload_skills"}
 
+# Terminal showcase colors for reasoning text (user spec 2026-10-05): main text
+# is the Homebrew-terminal green (the Homebrew Terminal profile's TextColor),
+# order marks orange, log marks and PR numbers white.
+_THINKING_GREEN = "\033[38;2;40;254;20m"
+_THINKING_ORANGE = "\033[38;2;255;159;10m"
+_THINKING_WHITE = "\033[38;2;255;255;255m"
+
+# §[2026-10-02] log marks, #123456 PR numbers, and standalone 1. 2. 3. order
+# marks. The § branch comes first so a mark containing a PR number stays one
+# span; \b keeps decimals (3.14) and versions (v1.0.1) out of the number
+# branch, and (?=\s) keeps "2.5 hours" out too.
+_THINKING_TOKEN_RE = re.compile(r"§\s*\[[^\]]*\]|#\d{6,}\b|\b\d{1,3}\.(?=\s)")
+
+# A token the colorizer needs in one piece must not be split across two
+# prints, or its second half renders plain green. Matches the START of an
+# incomplete tail token (used to cut the live box's force-flush before it).
+_THINKING_PARTIAL_TAIL_RE = re.compile(r"§\s*\[[^\]]*$|#\d{1,5}$|(?<![\d.#])\d{1,3}\.$")
+
+
+def _thinking_line(text: str) -> str:
+    """Colorize one reasoning line: main text green, tokens per the showcase spec."""
+    parts: list[str] = []
+    last = 0
+    for match in _THINKING_TOKEN_RE.finditer(text):
+        parts.append(text[last:match.start()])
+        token = match.group(0)
+        color = _THINKING_WHITE if token.startswith(("§", "#")) else _THINKING_ORANGE
+        parts.append(f"{color}{token}{_THINKING_GREEN}")
+        last = match.end()
+    parts.append(text[last:])
+    return f"{_THINKING_GREEN}{''.join(parts)}\033[0m"
+
 
 def _thinking_prefix() -> str:
     """``  [thinking] `` — the reasoning-preview label; also measured for wrap width."""
@@ -135,14 +167,15 @@ class CLIStreamMixin:
         if not preview_text:
             return
         if self.verbose:
-            _cprint(f"{_DIM}{_thinking_prefix()}{preview_text}{_RST}")
+            _cprint(f"{_DIM}{_thinking_prefix()}{_thinking_line(preview_text)}")
             return
         lines = preview_text.splitlines()
         if len(lines) > 5:
-            preview = "\n".join(lines[:5]) + f"\n  {t('cli.stream.thinking_more_lines', count=len(lines) - 5)}"
+            preview = "\n".join(_thinking_line(line) for line in lines[:5]) + \
+                f"\n  {_DIM}{t('cli.stream.thinking_more_lines', count=len(lines) - 5)}{_RST}"
         else:
-            preview = preview_text
-        _cprint(f"{_DIM}{_thinking_prefix()}{preview}{_RST}")
+            preview = "\n".join(_thinking_line(line) for line in lines)
+        _cprint(f"{_DIM}{_thinking_prefix()}{preview}")
 
     def _flush_reasoning_preview(self, *, force: bool = False) -> None:
         """Flush buffered reasoning text at natural boundaries.
@@ -264,13 +297,20 @@ class CLIStreamMixin:
 
         self._reasoning_buf = getattr(self, "_reasoning_buf", "") + text
         # Emit complete lines; force-flush long partial lines so reasoning is visible in
-        # real-time even without newlines.
+        # real-time even without newlines. The force-flush cuts before an incomplete
+        # showcase token (§[…, #12345, trailing "1.") so it never splits a token across
+        # two prints and leaves half of it uncolored.
         while "\n" in self._reasoning_buf:
             line, self._reasoning_buf = self._reasoning_buf.split("\n", 1)
-            _cprint(f"{_DIM}{line}{_RST}")
+            _cprint(_thinking_line(line))
         if len(self._reasoning_buf) > 80:
-            _cprint(f"{_DIM}{self._reasoning_buf}{_RST}")
-            self._reasoning_buf = ""
+            flush, rest = self._reasoning_buf, ""
+            tail = _THINKING_PARTIAL_TAIL_RE.search(flush)
+            if tail and tail.start() > 0:
+                flush, rest = flush[: tail.start()], flush[tail.start():]
+            if flush:
+                _cprint(_thinking_line(flush))
+            self._reasoning_buf = rest
 
     def _agent_status_print(self, *args, **kwargs) -> None:
         """``agent._print_fn`` for the interactive CLI: agent status lines (subagent completion ``✓ [set n · i/N]``,
@@ -298,7 +338,7 @@ class CLIStreamMixin:
             return
         buf = getattr(self, "_reasoning_buf", "")
         if buf:
-            _cprint(f"{_DIM}{buf}{_RST}")
+            _cprint(_thinking_line(buf))
             self._reasoning_buf = ""
         w = self._scrollback_box_width()
         _cprint(f"{_DIM}└{'─' * (w - 2)}┘{_RST}")
